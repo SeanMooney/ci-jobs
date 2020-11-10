@@ -1,0 +1,218 @@
+---
+- nodeset:
+    name: nfv
+    nodes:
+      - name: controller
+        label: ubuntu-bionic-compute
+    groups:
+      # Node where tests are executed and test results collected
+      - name: tempest
+        nodes:
+          - controller
+      # Nodes running the compute service
+      - name: compute
+        nodes:
+          - controller
+
+- nodeset:
+    name: nfv-multinode
+    nodes:
+      - name: controller
+        label: ubuntu-bionic
+      - name: compute
+        label: ubuntu-bionic-compute
+    groups:
+      # Node where tests are executed and test results collected
+      - name: tempest
+        nodes:
+          - controller
+      # Nodes running the compute service
+      - name: compute
+        nodes:
+          - controller
+          - compute
+      # Nodes that are not the controller
+      - name: subnode
+        nodes:
+          - compute
+      # Switch node for multinode networking setup
+      - name: switch
+        nodes:
+          - controller
+      # Peer nodes for multinode networking setup
+      - name: peers
+        nodes:
+          - compute
+
+
+- job:
+    name: testjob
+    run: playbooks/testjob.yaml
+
+- job:
+    name: tempest-dpdk
+    timeout: 10800
+    nodeset: nfv
+    required-projects:
+      - git.openstack.org/openstack/networking-ovs-dpdk
+    parent: tempest-all
+    pre-run:
+      - playbooks/dpdk.yaml
+      - playbooks/pip.yaml
+    vars:
+      zuul_copy_output:
+        '{{ devstack_log_dir }}/ovs-vswitchd.log': logs
+      tempest_concurrency: 1
+      # tempest_test_regex: '^(?!.*(?:tempest\.scenario\.test_network_advanced_server_ops\.TestNetworkAdvancedServerOps\.test_server_connectivity_suspend_resume.*)|(?:tempest\.scenario\.test_network_advanced_server_ops\.TestNetworkAdvancedServerOps\.test_server_connectivity_pause_unpause.*))((?:tempest\.scenario\.test_network_basic_ops.*)|(?:tempest\.scenario\.test_network_advanced_server_ops.*)|(?:tempest\.api\.network.*)|(?:tempest\.api\.compute.*)).*$'
+      tempest_test_regex: '^(?!.*(?:tempest\.scenario\.test_network_advanced_server_ops\.TestNetworkAdvancedServerOps\.test_server_connectivity_suspend_resume.*)|(?:tempest\.scenario\.test_network_advanced_server_ops\.TestNetworkAdvancedServerOps\.test_server_connectivity_pause_unpause.*))((?:tempest\.scenario\.test_network_basic_ops.*)|(?:tempest\.scenario\.test_network_advanced_server_ops.*)).*$'
+      tempest_black_regex: 'mtu|keypair|images|negative|disk|quota'
+      devstack_local_conf:
+        post-config:
+          $NOVA_CONF:
+            DEFAULT:
+              firewall_driver: nova.virt.firewall.NoopFirewallDriver
+            scheduler:
+              enabled_filters: 'AvailabilityZoneFilter,ComputeFilter,ComputeCapabilitiesFilter,ImagePropertiesFilter,ServerGroupAntiAffinityFilter,ServerGroupAffinityFilter,SameHostFilter,DifferentHostFilter,PciPassthroughFilter,NUMATopologyFilter'
+              max_attempts: 10
+            libvirt:
+              cpu_mode: custom
+              cpu_model: kvm64
+              cpu_model_extra_flags: pcid
+        test-config:
+          $TEMPEST_CONFIG:
+            compute:
+              flavor_ref: 420
+              flavor_ref_alt: 840
+            network:
+              ping_timeout: 180
+              connect_timeout: 180
+              ssh_timeout: 300
+            compute-feature-enabled:
+              interface_attach: true
+              scheduler_enabled_filters: 'AvailabilityZoneFilter,ComputeFilter,ComputeCapabilitiesFilter,ImagePropertiesFilter,ServerGroupAntiAffinityFilter,ServerGroupAffinityFilter,SameHostFilter,DifferentHostFilter,PciPassthroughFilter,NUMATopologyFilter'
+      devstack_localrc:
+        OVS_DATAPATH_TYPE: netdev
+        OVS_LOG_DIR: /opt/stack/logs
+        OVS_HUGEPAGE_MOUNT_PAGESIZE: 2M
+        OVS_HUGEPAGE_MOUNT: /dev/hugepages
+        OVS_ALLOCATE_HUGEPAGES: true
+        OVS_SOCKET_MEM: 512
+        OVS_CORE_MASK: 0x1
+        OVS_PMD_CORE_MASK: 0x2
+        OVS_DPDK_MODE: controller_ovs_dpdk
+        OVS_DPDK_BIND_PORT: false
+        OVS_ENABLE_SG_FIREWALL_MULTICAST: false
+        OVS_DPDK_MEM_SEGMENTS: 10240
+        OVS_DPDK_VHOST_USER_DEBUG: y
+        OVS_DPDK_SERVICE_DEBUG_OUTPUT: true
+        OVS_BRIDGE_MAPPINGS: 'public:br-ex'
+        OVS_DPDK_PORT_MAPPINGS: 'enp2s0:br-ex'
+      devstack_plugins:
+        networking-ovs-dpdk: git://git.openstack.org/openstack/networking-ovs-dpdk.git
+    group-vars:
+      subnode:
+        zuul_copy_output:
+          '{{ devstack_log_dir }}/ovs-vswitchd.log': logs
+        devstack_local_conf:
+          post-config:
+            $NOVA_CONF:
+              DEFAULT:
+                firewall_driver: nova.virt.firewall.NoopFirewallDriver
+                scheduler_default_filters: $FILTERS,PciPassthroughFilter,NUMATopologyFilter
+              libvirt:
+                cpu_mode: custom
+                cpu_model: kvm64
+                cpu_model_extra_flags: pcid
+        devstack_localrc:
+          OVS_DATAPATH_TYPE: netdev
+          OVS_LOG_DIR: /opt/stack/logs
+          OVS_HUGEPAGE_MOUNT_PAGESIZE: 2M
+          OVS_HUGEPAGE_MOUNT: /dev/hugepages
+          OVS_ALLOCATE_HUGEPAGES: false
+          OVS_SOCKET_MEM: 512
+          OVS_CORE_MASK: 0x1
+          OVS_PMD_CORE_MASK: 0x2
+          OVS_DPDK_MODE: compute
+          OVS_DPDK_BIND_PORT: false
+          OVS_ENABLE_SG_FIREWALL_MULTICAST: false
+          OVS_DPDK_MEM_SEGMENTS: 10240
+          OVS_DPDK_VHOST_USER_DEBUG: y
+          OVS_DPDK_SERVICE_DEBUG_OUTPUT: true
+          OVS_BRIDGE_MAPPINGS: 'public:br-ex'
+          OVS_DPDK_PORT_MAPPINGS: 'enp2s0:br-ex'
+          Q_PLUGIN_CONF_FILE: '/etc/neutron/plugins/ml2/ml2_conf.ini'
+        devstack_plugins:
+          networking-ovs-dpdk: git://git.openstack.org/openstack/networking-ovs-dpdk.git
+
+- job:
+    name: tempest-dpdk-multinode
+    parent: tempest-dpdk
+    nodeset: nfv-multinode
+    vars:
+      tempest_concurrency: 6
+
+- job:
+    name: tempest-pinning
+    timeout: 10800
+    nodeset: nfv
+    parent: tempest-all
+    pre-run:
+      - playbooks/pinning.yaml
+      - playbooks/pip.yaml
+    vars:
+      zuul_copy_output:
+        '{{ devstack_log_dir }}/ovs-vswitchd.log': logs
+      tempest_concurrency: 1
+      # tempest_test_regex: '^(?!.*(?:tempest\.scenario\.test_network_advanced_server_ops\.TestNetworkAdvancedServerOps\.test_server_connectivity_suspend_resume.*)|(?:tempest\.scenario\.test_network_advanced_server_ops\.TestNetworkAdvancedServerOps\.test_server_connectivity_pause_unpause.*))((?:tempest\.scenario\.test_network_basic_ops.*)|(?:tempest\.scenario\.test_network_advanced_server_ops.*)|(?:tempest\.api\.network.*)|(?:tempest\.api\.compute.*)).*$'
+      tempest_test_regex: '^(?!.*(?:tempest\.scenario\.test_network_advanced_server_ops\.TestNetworkAdvancedServerOps\.test_server_connectivity_suspend_resume.*)|(?:tempest\.scenario\.test_network_advanced_server_ops\.TestNetworkAdvancedServerOps\.test_server_connectivity_pause_unpause.*))((?:tempest\.scenario\.test_network_basic_ops.*)|(?:tempest\.scenario\.test_network_advanced_server_ops.*)).*$'
+      tempest_black_regex: 'mtu|keypair|images|negative|disk|quota'
+      devstack_local_conf:
+        post-config:
+          $NOVA_CONF:
+            DEFAULT:
+              firewall_driver: nova.virt.firewall.NoopFirewallDriver
+            scheduler:
+              enabled_filters: 'AvailabilityZoneFilter,ComputeFilter,ComputeCapabilitiesFilter,ImagePropertiesFilter,ServerGroupAntiAffinityFilter,ServerGroupAffinityFilter,SameHostFilter,DifferentHostFilter,PciPassthroughFilter,NUMATopologyFilter'
+              max_attempts: 10
+            libvirt:
+              cpu_mode: custom
+              cpu_model: kvm64
+              cpu_model_extra_flags: pcid
+        test-config:
+          $TEMPEST_CONFIG:
+            compute:
+              flavor_ref: 420
+              flavor_ref_alt: 840
+            network:
+              ping_timeout: 180
+              connect_timeout: 180
+              ssh_timeout: 300
+            compute-feature-enabled:
+              interface_attach: false
+              scheduler_enabled_filters: 'AvailabilityZoneFilter,ComputeFilter,ComputeCapabilitiesFilter,ImagePropertiesFilter,ServerGroupAntiAffinityFilter,ServerGroupAffinityFilter,SameHostFilter,DifferentHostFilter,PciPassthroughFilter,NUMATopologyFilter'
+    group-vars:
+      subnode:
+        zuul_copy_output:
+          '{{ devstack_log_dir }}/ovs-vswitchd.log': logs
+        devstack_local_conf:
+          post-config:
+            $NOVA_CONF:
+              DEFAULT:
+                firewall_driver: nova.virt.firewall.NoopFirewallDriver
+                scheduler_default_filters: $FILTERS,PciPassthroughFilter,NUMATopologyFilter
+              libvirt:
+                cpu_mode: custom
+                cpu_model: kvm64
+                cpu_model_extra_flags: pcid
+
+- job:
+    name: tempest-pinning-multinode
+    parent: tempest-pinning
+    nodeset: nfv-multinode
+    vars:
+      tempest_concurrency: 6
+
+- project:
+    check:
+      jobs:
+        - tox-linters

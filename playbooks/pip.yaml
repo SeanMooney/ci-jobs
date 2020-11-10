@@ -1,0 +1,16 @@
+---
+- hosts: all
+  tasks:
+    - name: create pip conf
+      become: true
+      blockinfile:
+        path: /etc/pip.conf
+        create: true
+        mode: 0777
+        block: |
+          [global]
+          timeout = 10
+          index-url =  https://devpi.seanmooney.info/pypi/pypi/
+          extra-index-url = https://pypi.org/simple/
+          retries = 0
+          proxy = 192.168.1.155:32345

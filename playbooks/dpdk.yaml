@@ -1,0 +1,28 @@
+---
+- hosts: controller
+  tasks:
+    - name: allocate hugepages
+      shell: echo 1280 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+      become: true
+
+- hosts: subnode
+  tasks:
+    - name: allocate hugepages
+      shell: echo 2048 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+      become: true
+
+- hosts: controller
+  tasks:
+    - name: create local.sh
+      blockinfile:
+        path: /opt/stack/devstack/local.sh
+        create: true
+        mode: 0777
+        block: |
+          # creating an nfv flavor used in tempest
+          # primary flavor
+          openstack flavor create --id 420 --ram 64 --disk 1 --vcpus 1 nfv-64-1-1
+          openstack flavor set --property hw:mem_page_size=large 420
+          # secondary flavor
+          openstack flavor create --id 840 --ram 64 --disk 1 --vcpus 2 nfv-128-1-2
+          openstack flavor set --property hw:mem_page_size=large 840
