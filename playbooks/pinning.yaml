@@ -1,0 +1,22 @@
+---
+- hosts: controller
+  tasks:
+    - name: create local.sh
+      blockinfile:
+        path: /opt/stack/devstack/local.sh
+        create: true
+        mode: 0777
+        block: |
+          # creating an nfv flavor used in tempest
+          # primary flavor
+          openstack flavor create --id 420 --ram 64 --disk 1 --vcpus 1 nfv-64-1-1
+          openstack flavor set --property hw:cpu_policy=dedicated --property hw:cpu_thread_policy=isolate 420
+          openstack flavor set --property hw:cpu_emulator_threads=isolate 420
+
+          # secondary flavor
+          openstack flavor create --id 840 --ram 128 --disk 1 --vcpus 2 nfv-128-1-2
+          openstack flavor set --property hw:numa_nodes=2 --property hw:cpu_cores=2 840
+          openstack flavor set --property hw:cpu_sockets=1 --property hw:cpu_threads=1 840
+          openstack flavor set --property hw:cpu_policy=dedicated --property hw:cpu_thread_policy=prefer 840
+          openstack flavor set --property hw:cpu_emulator_threads=share 840
+          openstack flavor set --property hw:cpu_realtime=yes --property hw:cpu_realtime_mask="^0" 840
