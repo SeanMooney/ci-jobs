@@ -12,4 +12,4 @@
       sizes, and network connectivity.
     run: playbooks/ci-jobs-validate-host.yaml
     required-projects:
-      - opendev/zuul/zuul-jobs
+      - zuul/zuul-jobs
