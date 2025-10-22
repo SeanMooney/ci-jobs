@@ -2,6 +2,7 @@
 # Project pipeline configuration for ci-jobs
 
 - project:
+    name: SeanMooney/ci-jobs
     check:
       jobs:
         - ci-jobs-validate-host
