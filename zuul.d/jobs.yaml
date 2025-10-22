@@ -1,0 +1,15 @@
+---
+# Job definitions for ci-jobs repository
+
+- job:
+    name: ci-jobs-validate-host
+    parent: base
+    description: |
+      Validate the build host by logging system information.
+
+      This job runs the validate-host role from zuul-jobs to demonstrate
+      end-to-end CI functionality. It logs processor info, filesystem
+      sizes, and network connectivity.
+    run: playbooks/ci-jobs-validate-host.yaml
+    required-projects:
+      - opendev.org/zuul/zuul-jobs

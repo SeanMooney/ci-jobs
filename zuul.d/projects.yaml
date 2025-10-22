@@ -1,0 +1,10 @@
+---
+# Project pipeline configuration for ci-jobs
+
+- project:
+    check:
+      jobs:
+        - ci-jobs-validate-host
+    gate:
+      jobs:
+        - ci-jobs-validate-host
